@@ -1,22 +1,51 @@
 use std::str;
 
+use nom::{alphanumeric};
+
 #[derive(Debug, PartialEq)]
 pub enum Expression<'a> {
-    Function(&'a str),
+    Function {
+        name: &'a str,
+        arguments: Vec<&'a str>,
+    },
     Literal(&'a str),
 }
 
+// Parse a list of arguments
+// TODO: allow trailing commas, allow leading and trailing whitespace
+named!(arguments<&[u8], Vec<&str> >, delimited!(
+    char!('('),
+    separated_list!(
+        terminated!(
+            char!(','),
+            many0!(char!(' '))
+        ),
+        map_res!(
+            alphanumeric,
+            str::from_utf8
+        )
+    ),
+    char!(')')
+));
+
 // Parse a function
-named!(function<&[u8], Expression>, map!(
-    map_res!(
-        delimited!(
-            char!('{'),
-            take_until!("}"),
-            char!('}')
+named!(function<&[u8], Expression>, chain!(
+    tag!("{") ~
+    // Parse until the function ends or the arguments start
+    name: map_res!(
+        alt!(
+            take_until!("(") |
+            take_until!("}")
         ),
         str::from_utf8
-    ),
-    Expression::Function
+    ) ~
+    // Optionally parse a list of arguments
+    args: arguments? ~
+    tag!("}") ,
+    || { Expression::Function {
+        name: name,
+        arguments: args.unwrap_or(vec![]),
+    }}
 ));
 
 // Parse a literal
@@ -38,7 +67,42 @@ named!(pub expressions<&[u8], Vec<Expression> >, many0!(alt!(
 mod tests {
     use nom::IResult;
 
-    use super::{Expression, function, literal, expressions};
+    use super::{Expression, arguments, function, literal, expressions};
+
+    #[test]
+    fn parse_arguments() {
+        assert_eq!(
+            arguments(b"()"),
+            IResult::Done(
+                &b""[..],
+                vec![]
+            )
+        );
+
+        assert_eq!(
+            arguments(b"(test)"),
+            IResult::Done(
+                &b""[..],
+                vec!["test"]
+            )
+        );
+
+        assert_eq!(
+            arguments(b"(test,test2)"),
+            IResult::Done(
+                &b""[..],
+                vec!["test", "test2"]
+            )
+        );
+
+        assert_eq!(
+            arguments(b"(test, test2)"),
+            IResult::Done(
+                &b""[..],
+                vec!["test", "test2"]
+            )
+        );
+    }
 
     #[test]
     fn parse_function() {
@@ -46,7 +110,32 @@ mod tests {
             function(b"{test}"),
             IResult::Done(
                 &b""[..],
-                Expression::Function("test")
+                Expression::Function {
+                    name: "test",
+                    arguments: vec![],
+                }
+            )
+        );
+
+        assert_eq!(
+            function(b"{test()}"),
+            IResult::Done(
+                &b""[..],
+                Expression::Function {
+                    name: "test",
+                    arguments: vec![],
+                }
+            )
+        );
+
+        assert_eq!(
+            function(b"{test(1, 2, 3)}"),
+            IResult::Done(
+                &b""[..],
+                Expression::Function {
+                    name: "test",
+                    arguments: vec!["1", "2", "3"],
+                }
             )
         );
     }
@@ -69,9 +158,15 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 vec![
-                    Expression::Function("test"),
+                    Expression::Function {
+                        name: "test",
+                        arguments: vec![],
+                    },
                     Expression::Literal("literal"),
-                    Expression::Function("test2"),
+                    Expression::Function {
+                        name: "test2",
+                        arguments: vec![],
+                    },
                     Expression::Literal("haha"),
                 ]
             )
@@ -83,7 +178,10 @@ mod tests {
                 &b""[..],
                 vec![
                     Expression::Literal("haha"),
-                    Expression::Function("test"),
+                    Expression::Function {
+                        name: "test",
+                        arguments: vec![],
+                    },
                 ]
             )
         );

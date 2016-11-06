@@ -37,12 +37,15 @@ mod tests {
     fn parse_method() {
         let edo = Edo::new();
         assert_eq!(
-            edo.parse("haha{test}"),
+            edo.parse("haha{test(a, b, c)}"),
             IResult::Done(
                 &b""[..],
                 vec![
                     parse::Expression::Literal("haha"),
-                    parse::Expression::Function("test"),
+                    parse::Expression::Function {
+                        name: "test",
+                        arguments: vec!["a", "b", "c"],
+                    },
                 ]
             )
         );
