@@ -18,7 +18,7 @@ use parse::Expression;
 /// A single template. Allows registering of handlers and rendering
 pub struct Edo<'a> {
     #[doc(hidden)]
-    handlers: HashMap<&'a str, Box<Fn() -> &'a str>>,
+    handlers: HashMap<&'a str, Box<Fn(Vec<&'a str>) -> String>>,
     template: Vec<Expression<'a>>,
 }
 
@@ -45,10 +45,10 @@ impl<'a> Edo<'a> {
     /// # #![allow(unused_variables)]
     /// # use edo::Edo;
     /// let mut template = Edo::new("Hello {name}").unwrap();
-    /// template.register_handler("name", || "World!");
+    /// template.register_handler("name", |_| String::from("World!"));
     /// ```
     pub fn register_handler<F>(&mut self, name: &'a str, handler: F) where
-        F: 'static + Fn() -> &'a str {
+        F: 'static + Fn(Vec<&'a str>) -> String {
         self.handlers.insert(name, Box::new(handler));
     }
 
@@ -58,7 +58,7 @@ impl<'a> Edo<'a> {
     /// ```
     /// # use edo::Edo;
     /// let mut template = Edo::new("Hello {name}").unwrap();
-    /// template.register_handler("name", || "World!");
+    /// template.register_handler("name", |_| String::from("World!"));
     /// let output = template.render();
     /// assert_eq!(output, "Hello World!");
     /// ```
@@ -69,15 +69,15 @@ impl<'a> Edo<'a> {
         // 2. Call the handlers for each function call and replace within the output
         self.template.iter()
             .map(|expression| match *expression {
-                Expression::Literal(text) => text,
+                Expression::Literal(text) => String::from(text),
                 Expression::Function { name, ref arguments } => {
                     match self.handlers.get(name) {
-                        None => "",
-                        Some(handler) => handler(),
+                        None => String::from(""),
+                        Some(handler) => handler(arguments.clone()),
                     }
                 }
             })
-            .collect::<Vec<&str>>()
+            .collect::<Vec<String>>()
             .concat()
     }
 }
@@ -98,7 +98,7 @@ mod tests {
             Ok(edo) => edo,
             Err(err) => panic!(err),
         };
-        edo.register_handler("name", || "World!");
+        edo.register_handler("name", |_| String::from("World!"));
         assert!(edo.handlers.get("name").is_some());
     }
 
@@ -108,7 +108,7 @@ mod tests {
             Ok(edo) => edo,
             Err(err) => panic!(err),
         };
-        edo.register_handler("name", || "World!");
+        edo.register_handler("name", |_| String::from("World!"));
         assert_eq!(
             edo.render(),
             "Hello World!"
@@ -117,13 +117,28 @@ mod tests {
 
     #[test]
     fn render_template_with_missing_handler() {
-        let mut edo = match Edo::new("Hello {name}") {
+        let edo = match Edo::new("Hello {name}") {
             Ok(edo) => edo,
             Err(err) => panic!(err),
         };
         assert_eq!(
             edo.render(),
             "Hello "
+        );
+    }
+
+    #[test]
+    fn render_template_with_arguments() {
+        let mut edo = match Edo::new("Hello {name(Gio, yes)}") {
+            Ok(edo) => edo,
+            Err(err) => panic!(err),
+        };
+        edo.register_handler("name", |args|
+            format!("{}{}", args[0], if args[1] == "yes" { "!" } else { "" })
+        );
+        assert_eq!(
+            edo.render(),
+            "Hello Gio!"
         );
     }
 }
