@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate nom;
 
+mod error;
 mod parse;
 
 use std::str;
@@ -17,19 +18,20 @@ impl Edo {
         }
     }
 
-    fn parse<'a>(self, input: &'a str) -> IResult<&[u8], Vec<parse::Expression>> {
-        let (_, parsed_expressions) = try_parse!(
-            input.as_bytes(),
-            parse::expressions
-        );
-        IResult::Done(&b""[..], parsed_expressions)
+    // Parse a template into a vector of expressions
+    fn parse<'a>(self, input: &'a str) -> Result<Vec<parse::Expression>, error::EdoError> {
+        match parse::expressions(input.as_bytes()) {
+            IResult::Done(_, expressions) => Ok(expressions),
+            IResult::Error(err) =>
+                Err(error::EdoError::ParsingError),
+            IResult::Incomplete(needed) =>
+                Err(error::EdoError::ParsingError),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use nom::IResult;
-
     use super::{Edo};
     use super::{parse};
 
@@ -38,16 +40,13 @@ mod tests {
         let edo = Edo::new();
         assert_eq!(
             edo.parse("haha{test(a, b, c)}"),
-            IResult::Done(
-                &b""[..],
-                vec![
-                    parse::Expression::Literal("haha"),
-                    parse::Expression::Function {
-                        name: "test",
-                        arguments: vec!["a", "b", "c"],
-                    },
-                ]
-            )
+            Ok(vec![
+                parse::Expression::Literal("haha"),
+                parse::Expression::Function {
+                    name: "test",
+                    arguments: vec!["a", "b", "c"],
+                },
+            ])
         );
     }
 }
