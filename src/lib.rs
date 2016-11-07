@@ -1,3 +1,8 @@
+//! Edo is a VERY simple templating language. It allows you to register handlers that are executed when their matching names are found in the template.
+//!
+//! For example, with the template `"Hello {name}"`, the `name` handler would be executed and the string it returns would be substituted in place of the original `{name}`.
+#![deny(missing_docs)]
+
 #[macro_use]
 extern crate nom;
 
@@ -5,48 +10,120 @@ mod error;
 mod parse;
 
 use std::str;
+use std::collections::HashMap;
 
-use nom::IResult;
+use error::EdoError;
+use parse::Expression;
 
-pub struct Edo {
-
+/// A single template. Allows registering of handlers and rendering
+pub struct Edo<'a> {
+    #[doc(hidden)]
+    handlers: HashMap<&'a str, Box<Fn() -> &'a str>>,
+    template: Vec<Expression<'a>>,
 }
 
-impl Edo {
-    pub fn new() -> Edo {
-        Edo {
-        }
+impl<'a> Edo<'a> {
+    /// Creates a new template instance.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #![allow(unused_variables)]
+    /// # use edo::Edo;
+    /// let template = Edo::new("Hello {name}");
+    /// ```
+    pub fn new(template_string: &'a str) -> Result<Edo<'a>, EdoError> {
+        Ok(Edo {
+            handlers: HashMap::new(),
+            template: try!(parse::parse(template_string)),
+        })
     }
 
-    // Parse a template into a vector of expressions
-    fn parse<'a>(self, input: &'a str) -> Result<Vec<parse::Expression>, error::EdoError> {
-        match parse::expressions(input.as_bytes()) {
-            IResult::Done(_, expressions) => Ok(expressions),
-            IResult::Error(err) =>
-                Err(error::EdoError::ParsingError),
-            IResult::Incomplete(needed) =>
-                Err(error::EdoError::ParsingError),
-        }
+    /// Register a new function handler
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #![allow(unused_variables)]
+    /// # use edo::Edo;
+    /// let mut template = Edo::new("Hello {name}").unwrap();
+    /// template.register_handler("name", || "World!");
+    /// ```
+    pub fn register_handler<F>(&mut self, name: &'a str, handler: F) where
+        F: 'static + Fn() -> &'a str {
+        self.handlers.insert(name, Box::new(handler));
+    }
+
+    /// Render template into a string
+    ///
+    /// # Examples
+    /// ```
+    /// # use edo::Edo;
+    /// let mut template = Edo::new("Hello {name}").unwrap();
+    /// template.register_handler("name", || "World!");
+    /// let output = template.render();
+    /// assert_eq!(output, "Hello World!");
+    /// ```
+    // TODO: add a strict mode that errors when there is no handler
+    pub fn render(self) -> String {
+        // Iterate over the template and
+        // 1. Leave literals untouched
+        // 2. Call the handlers for each function call and replace within the output
+        self.template.iter()
+            .map(|expression| match *expression {
+                Expression::Literal(text) => text,
+                Expression::Function { name, ref arguments } => {
+                    match self.handlers.get(name) {
+                        None => "",
+                        Some(handler) => handler(),
+                    }
+                }
+            })
+            .collect::<Vec<&str>>()
+            .concat()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Edo};
-    use super::{parse};
+    use super::Edo;
 
     #[test]
-    fn parse_method() {
-        let edo = Edo::new();
+    fn create_new_edo() {
+        let edo = Edo::new("Hello {name}");
+        assert!(edo.is_ok());
+    }
+
+    #[test]
+    fn register_handler() {
+        let mut edo = match Edo::new("Hello {name}") {
+            Ok(edo) => edo,
+            Err(err) => panic!(err),
+        };
+        edo.register_handler("name", || "World!");
+        assert!(edo.handlers.get("name").is_some());
+    }
+
+    #[test]
+    fn render_template() {
+        let mut edo = match Edo::new("Hello {name}") {
+            Ok(edo) => edo,
+            Err(err) => panic!(err),
+        };
+        edo.register_handler("name", || "World!");
         assert_eq!(
-            edo.parse("haha{test(a, b, c)}"),
-            Ok(vec![
-                parse::Expression::Literal("haha"),
-                parse::Expression::Function {
-                    name: "test",
-                    arguments: vec!["a", "b", "c"],
-                },
-            ])
+            edo.render(),
+            "Hello World!"
+        );
+    }
+
+    #[test]
+    fn render_template_with_missing_handler() {
+        let mut edo = match Edo::new("Hello {name}") {
+            Ok(edo) => edo,
+            Err(err) => panic!(err),
+        };
+        assert_eq!(
+            edo.render(),
+            "Hello "
         );
     }
 }

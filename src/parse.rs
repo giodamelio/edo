@@ -1,6 +1,8 @@
 use std::str;
 
-use nom::{alphanumeric};
+use nom::{alphanumeric, IResult};
+
+use error::EdoError;
 
 #[derive(Debug, PartialEq)]
 pub enum Expression<'a> {
@@ -63,11 +65,29 @@ named!(pub expressions<&[u8], Vec<Expression> >, many0!(alt!(
     literal
 )));
 
+/// Parse a template into a vector of expressions
+pub fn parse<'a>(input: &'a str) -> Result<Vec<Expression>, EdoError> {
+    match expressions(input.as_bytes()) {
+        IResult::Done(_, expressions) => Ok(expressions),
+        IResult::Error(_) =>
+            Err(EdoError::ParsingError),
+        IResult::Incomplete(_) =>
+            Err(EdoError::ParsingError),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use nom::IResult;
 
-    use super::{Expression, arguments, function, literal, expressions};
+    use super::{
+        Expression,
+        arguments,
+        function,
+        literal,
+        expressions,
+        parse
+    };
 
     #[test]
     fn parse_arguments() {
@@ -184,6 +204,20 @@ mod tests {
                     },
                 ]
             )
+        );
+    }
+
+    #[test]
+    fn parse_method() {
+        assert_eq!(
+            parse("haha{test(a, b, c)}"),
+            Ok(vec![
+                Expression::Literal("haha"),
+                Expression::Function {
+                    name: "test",
+                    arguments: vec!["a", "b", "c"],
+                },
+            ])
         );
     }
 }
