@@ -14,6 +14,7 @@ pub enum Expression<'a> {
 }
 
 // Parse a list of arguments
+// TODO: allow non alphanumeric values inside arguments
 // TODO: allow trailing commas, allow leading and trailing whitespace
 named!(arguments<&[u8], Vec<&str> >, delimited!(
     char!('('),
