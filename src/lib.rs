@@ -1,6 +1,26 @@
 //! Edo is a VERY simple templating language. It allows you to register handlers that are executed when their matching names are found in the template.
 //!
-//! For example, with the template `"Hello {name}"`, the `name` handler would be executed and the string it returns would be substituted in place of the original `{name}`.
+//! For example, with the template `"Hello {name}"`, the `name` handler would be executed and the string it returns would be substituted in place of the original `{name}`. Handler functions can also accept arguments, which are passed in as a `Vec<str>`.
+//!
+//! # Examples
+//!
+//! ### Simple example
+//! ```
+//! use edo::Edo;
+//! let mut template = Edo::new("Hello {name}").unwrap();
+//! template.register_handler("name", |_| String::from("World!"));
+//! let output = template.render();
+//! assert_eq!(output, "Hello World!");
+//! ```
+//!
+//! ### With arguments
+//! ```
+//! use edo::Edo;
+//! let mut template = Edo::new("{say_hello(World)}").unwrap();
+//! template.register_handler("say_hello", |args| format!("Hello {}", args[0]));
+//! let output = template.render();
+//! assert_eq!(output, "Hello World");
+//! ```
 #![deny(missing_docs)]
 
 #[macro_use]
