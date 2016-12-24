@@ -24,7 +24,7 @@ You can also use a handler function to calculate the value.
 use edo::Edo;
 
 let mut template = Edo::new("Hello {name}").unwrap();
-template.register_handler("name", |_| String::from("World!"));
+template.register_handler("name", |_| Ok("World!".to_string()));
 let output = template.render();
 assert_eq!(output, "Hello World!");
 ```
@@ -35,7 +35,7 @@ Your handlers can also take arguments (As a `Vec<str>`).
 use edo::Edo;
 
 let mut template = Edo::new("{say_hello(World)}").unwrap();
-template.register_handler("say_hello", |args| format!("Hello {}", args[0]));
+template.register_handler("say_hello", |args| Ok(format!("Hello {}", args[0])));
 let output = template.render();
 assert_eq!(output, "Hello World");
 ```

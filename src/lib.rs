@@ -19,7 +19,7 @@
 //! use edo::Edo;
 //!
 //! let mut template = Edo::new("Hello {name}").unwrap();
-//! template.register_handler("name", |_| String::from("World!"));
+//! template.register_handler("name", |_| Ok("World!".to_string()));
 //! let output = template.render();
 //! assert_eq!(output, "Hello World!");
 //! ```
@@ -29,7 +29,7 @@
 //! use edo::Edo;
 //!
 //! let mut template = Edo::new("{say_hello(World)}").unwrap();
-//! template.register_handler("say_hello", |args| format!("Hello {}", args[0]));
+//! template.register_handler("say_hello", |args| Ok(format!("Hello {}", args[0])));
 //! let output = template.render();
 //! assert_eq!(output, "Hello World");
 //! ```
@@ -48,7 +48,7 @@ use error::EdoError;
 use parse::Expression;
 
 enum ValueProducer<'a> {
-    Handler(Box<Fn(Vec<&'a str>) -> String>),
+    Handler(Box<Fn(Vec<&'a str>) -> Result<String, String>>),
     Static(String),
 }
 
@@ -82,10 +82,10 @@ impl<'a> Edo<'a> {
     /// # #![allow(unused_variables)]
     /// # use edo::Edo;
     /// let mut template = Edo::new("Hello {name}").unwrap();
-    /// template.register_handler("name", |_| String::from("World!"));
+    /// template.register_handler("name", |_| Ok("World!".to_string()));
     /// ```
     pub fn register_handler<F>(&mut self, name: &'a str, handler: F) where
-        F: 'static + Fn(Vec<&'a str>) -> String {
+        F: 'static + Fn(Vec<&'a str>) -> Result<String, String> {
         self.value_producers.insert(name, ValueProducer::Handler(Box::new(handler)));
     }
 
@@ -108,7 +108,7 @@ impl<'a> Edo<'a> {
     /// ```
     /// # use edo::Edo;
     /// let mut template = Edo::new("Hello {name}").unwrap();
-    /// template.register_handler("name", |_| String::from("World!"));
+    /// template.register_handler("name", |_| Ok("World!".to_string()));
     /// let output = template.render();
     /// assert_eq!(output, "Hello World!");
     /// ```
@@ -119,12 +119,18 @@ impl<'a> Edo<'a> {
         // 2. Call the handlers for each function call and replace within the output
         self.template.iter()
             .map(|expression| match *expression {
-                Expression::Literal(text) => String::from(text),
+                Expression::Literal(text) => text.to_string(),
                 Expression::Function { name, ref arguments } => {
                     match self.value_producers.get(name) {
-                        None => String::from(""),
+                        None => "".to_string(),
                         Some(value_producer) => match value_producer {
-                            &ValueProducer::Handler(ref handler) => handler(arguments.clone()),
+                            &ValueProducer::Handler(ref handler) => match handler(arguments.clone()) {
+                                Ok(string) => string,
+                                Err(error_string) => {
+                                    // TODO add a message to error log
+                                    error_string
+                                },
+                            },
                             &ValueProducer::Static(ref value) => value.clone(),
                         },
                     }
@@ -151,7 +157,7 @@ mod tests {
             Ok(edo) => edo,
             Err(err) => panic!(err),
         };
-        edo.register_handler("name", |_| String::from("World!"));
+        edo.register_handler("name", |_| Ok("World!".to_string()));
         assert!(edo.value_producers.get("name").is_some());
     }
 
@@ -171,7 +177,7 @@ mod tests {
             Ok(edo) => edo,
             Err(err) => panic!(err),
         };
-        edo.register_handler("name", |_| String::from("World!"));
+        edo.register_handler("name", |_| Ok("World!".to_string()));
         assert_eq!(
             edo.render(),
             "Hello World!"
@@ -197,7 +203,7 @@ mod tests {
             Err(err) => panic!(err),
         };
         edo.register_handler("name", |args|
-            format!("{}{}", args[0], if args[1] == "yes" { "!" } else { "" })
+            Ok(format!("{}{}", args[0], if args[1] == "yes" { "!" } else { "" }))
         );
         assert_eq!(
             edo.render(),
