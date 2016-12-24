@@ -7,6 +7,7 @@
 //! ### Static input
 //! ```
 //! use edo::Edo;
+//!
 //! let mut template = Edo::new("Hello {name}").unwrap();
 //! template.register_static("name", "World!");
 //! let output = template.render();
@@ -16,6 +17,7 @@
 //! ### Simple Handler
 //! ```
 //! use edo::Edo;
+//!
 //! let mut template = Edo::new("Hello {name}").unwrap();
 //! template.register_handler("name", |_| String::from("World!"));
 //! let output = template.render();
@@ -25,6 +27,7 @@
 //! ### Handler With Arguments 
 //! ```
 //! use edo::Edo;
+//!
 //! let mut template = Edo::new("{say_hello(World)}").unwrap();
 //! template.register_handler("say_hello", |args| format!("Hello {}", args[0]));
 //! let output = template.render();

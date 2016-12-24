@@ -3,6 +3,43 @@
 
 A super simple templating library for Rust.
 
+[Documentation](https://docs.rs/edo)
+
+# Examples
+
+You can use a simple static replacement.
+
+```rust
+use edo::Edo;
+
+let mut template = Edo::new("Hello {name}").unwrap();
+template.register_static("name", "World!");
+let output = template.render();
+assert_eq!(output, "Hello World!");
+```
+
+You can also use a handler function to calculate the value.
+
+```rust
+use edo::Edo;
+
+let mut template = Edo::new("Hello {name}").unwrap();
+template.register_handler("name", |_| String::from("World!"));
+let output = template.render();
+assert_eq!(output, "Hello World!");
+```
+
+Your handlers can also take arguments (As a `Vec<str>`).
+
+```rust
+use edo::Edo;
+
+let mut template = Edo::new("{say_hello(World)}").unwrap();
+template.register_handler("say_hello", |args| format!("Hello {}", args[0]));
+let output = template.render();
+assert_eq!(output, "Hello World");
+```
+
 # License
 
 This code is distributed under the MIT license
