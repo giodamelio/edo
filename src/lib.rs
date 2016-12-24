@@ -4,7 +4,16 @@
 //!
 //! # Examples
 //!
-//! ### Simple example
+//! ### Static input
+//! ```
+//! use edo::Edo;
+//! let mut template = Edo::new("Hello {name}").unwrap();
+//! template.register_static("name", String::from("World!"));
+//! let output = template.render();
+//! assert_eq!(output, "Hello World!");
+//! ```
+//!
+//! ### Simple Handler
 //! ```
 //! use edo::Edo;
 //! let mut template = Edo::new("Hello {name}").unwrap();
@@ -13,7 +22,7 @@
 //! assert_eq!(output, "Hello World!");
 //! ```
 //!
-//! ### With arguments
+//! ### Handler With Arguments 
 //! ```
 //! use edo::Edo;
 //! let mut template = Edo::new("{say_hello(World)}").unwrap();
@@ -35,10 +44,15 @@ use std::collections::HashMap;
 use error::EdoError;
 use parse::Expression;
 
+enum ValueProducer<'a> {
+    Handler(Box<Fn(Vec<&'a str>) -> String>),
+    Static(String),
+}
+
 /// A single template. Allows registering of handlers and rendering
 pub struct Edo<'a> {
     #[doc(hidden)]
-    handlers: HashMap<&'a str, Box<Fn(Vec<&'a str>) -> String>>,
+    value_producers: HashMap<&'a str, ValueProducer<'a>>,
     template: Vec<Expression<'a>>,
 }
 
@@ -53,7 +67,7 @@ impl<'a> Edo<'a> {
     /// ```
     pub fn new(template_string: &'a str) -> Result<Edo<'a>, EdoError> {
         Ok(Edo {
-            handlers: HashMap::new(),
+            value_producers: HashMap::new(),
             template: try!(parse::parse(template_string)),
         })
     }
@@ -69,7 +83,20 @@ impl<'a> Edo<'a> {
     /// ```
     pub fn register_handler<F>(&mut self, name: &'a str, handler: F) where
         F: 'static + Fn(Vec<&'a str>) -> String {
-        self.handlers.insert(name, Box::new(handler));
+        self.value_producers.insert(name, ValueProducer::Handler(Box::new(handler)));
+    }
+
+    /// Register a static replacement
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #![allow(unused_variables)]
+    /// # use edo::Edo;
+    /// let mut template = Edo::new("Hello {name}").unwrap();
+    /// template.register_static("name", String::from("World!"));
+    /// ```
+    pub fn register_static(&mut self, name: &'a str, input: String) {
+        self.value_producers.insert(name, ValueProducer::Static(input));
     }
 
     /// Render template into a string
@@ -91,9 +118,12 @@ impl<'a> Edo<'a> {
             .map(|expression| match *expression {
                 Expression::Literal(text) => String::from(text),
                 Expression::Function { name, ref arguments } => {
-                    match self.handlers.get(name) {
+                    match self.value_producers.get(name) {
                         None => String::from(""),
-                        Some(handler) => handler(arguments.clone()),
+                        Some(value_producer) => match value_producer {
+                            &ValueProducer::Handler(ref handler) => handler(arguments.clone()),
+                            &ValueProducer::Static(ref value) => value.clone(),
+                        },
                     }
                 }
             })
@@ -119,7 +149,17 @@ mod tests {
             Err(err) => panic!(err),
         };
         edo.register_handler("name", |_| String::from("World!"));
-        assert!(edo.handlers.get("name").is_some());
+        assert!(edo.value_producers.get("name").is_some());
+    }
+
+    #[test]
+    fn register_static() {
+        let mut edo = match Edo::new("Hello {name}") {
+            Ok(edo) => edo,
+            Err(err) => panic!(err),
+        };
+        edo.register_static("name", String::from("World!"));
+        assert!(edo.value_producers.get("name").is_some());
     }
 
     #[test]
