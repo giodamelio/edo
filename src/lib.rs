@@ -8,7 +8,7 @@
 //! ```
 //! use edo::Edo;
 //! let mut template = Edo::new("Hello {name}").unwrap();
-//! template.register_static("name", String::from("World!"));
+//! template.register_static("name", "World!");
 //! let output = template.render();
 //! assert_eq!(output, "Hello World!");
 //! ```
@@ -93,10 +93,10 @@ impl<'a> Edo<'a> {
     /// # #![allow(unused_variables)]
     /// # use edo::Edo;
     /// let mut template = Edo::new("Hello {name}").unwrap();
-    /// template.register_static("name", String::from("World!"));
+    /// template.register_static("name", "World!");
     /// ```
-    pub fn register_static(&mut self, name: &'a str, input: String) {
-        self.value_producers.insert(name, ValueProducer::Static(input));
+    pub fn register_static<S: Into<String>>(&mut self, name: &'a str, input: S) {
+        self.value_producers.insert(name, ValueProducer::Static(input.into()));
     }
 
     /// Render template into a string
@@ -158,7 +158,7 @@ mod tests {
             Ok(edo) => edo,
             Err(err) => panic!(err),
         };
-        edo.register_static("name", String::from("World!"));
+        edo.register_static("name", "World!");
         assert!(edo.value_producers.get("name").is_some());
     }
 
