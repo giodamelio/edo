@@ -38,7 +38,7 @@
 #[macro_use]
 extern crate nom;
 
-mod error;
+pub mod error;
 mod parse;
 
 use std::str;

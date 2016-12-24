@@ -1,8 +1,12 @@
+//! Errors
+
 use std::fmt;
 use std::error::Error;
 
+/// The error our format function might through
 #[derive(Debug, PartialEq)]
 pub enum EdoError {
+    /// An error occured while parsing the template
     ParsingError,
 }
 
