@@ -113,11 +113,29 @@ impl<'a> Edo<'a> {
     /// assert_eq!(output, "Hello World!");
     /// ```
     // TODO: add a strict mode that errors when there is no handler
-    pub fn render(self) -> String {
+    pub fn render(&mut self) -> String {
+        self.render_with_errors().0
+    }
+
+    /// Render a template into a string and recieve a vector of errors
+    ///
+    /// # Examples
+    /// ```
+    /// # use edo::Edo;
+    /// let mut template = Edo::new("Hello {name}").unwrap();
+    /// template.register_handler("name", |_| Err("Something Broke".to_string()));
+    /// let (output, errors) = template.render_with_errors();
+    /// assert_eq!(output, "Hello ");
+    /// assert_eq!(errors, vec!["Something Broke".to_string()]);
+    /// ```
+    pub fn render_with_errors(&mut self) -> (String, Vec<String>) {
+        // Keep track of errors
+        let mut errors: Vec<String> = vec![];
+
         // Iterate over the template and
         // 1. Leave literals untouched
         // 2. Call the handlers for each function call and replace within the output
-        self.template.iter()
+        (self.template.iter()
             .map(|expression| match *expression {
                 Expression::Literal(text) => text.to_string(),
                 Expression::Function { name, ref arguments } => {
@@ -127,8 +145,8 @@ impl<'a> Edo<'a> {
                             &ValueProducer::Handler(ref handler) => match handler(arguments.clone()) {
                                 Ok(string) => string,
                                 Err(error_string) => {
-                                    // TODO add a message to error log
-                                    error_string
+                                    errors.push(error_string);
+                                    "".to_string()
                                 },
                             },
                             &ValueProducer::Static(ref value) => value.clone(),
@@ -137,7 +155,7 @@ impl<'a> Edo<'a> {
                 }
             })
             .collect::<Vec<String>>()
-            .concat()
+            .concat(), errors)
     }
 }
 
@@ -186,7 +204,7 @@ mod tests {
 
     #[test]
     fn render_template_with_missing_handler() {
-        let edo = match Edo::new("Hello {name}") {
+        let mut edo = match Edo::new("Hello {name}") {
             Ok(edo) => edo,
             Err(err) => panic!(err),
         };
@@ -209,5 +227,17 @@ mod tests {
             edo.render(),
             "Hello Gio!"
         );
+    }
+
+    #[test]
+    fn render_with_errors() {
+        let mut edo = match Edo::new("Hello {name}") {
+            Ok(edo) => edo,
+            Err(err) => panic!(err),
+        };
+        edo.register_handler("name", |_| Err("BORK".to_string()));
+        let (output, errors) = edo.render_with_errors();
+        assert_eq!(output, "Hello ");
+        assert_eq!(errors, vec!["BORK"]);
     }
 }
