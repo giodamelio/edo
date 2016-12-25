@@ -12,9 +12,9 @@ You can use a simple static replacement.
 ```rust
 use edo::Edo;
 
-let mut template = Edo::new("Hello {name}").unwrap();
+let mut template: Edo<&str> = Edo::new("Hello {name}").unwrap();
 template.register_static("name", "World!");
-let output = template.render();
+let output = template.render("");
 assert_eq!(output, "Hello World!");
 ```
 
@@ -23,9 +23,9 @@ You can also use a handler function to calculate the value.
 ```rust
 use edo::Edo;
 
-let mut template = Edo::new("Hello {name}").unwrap();
-template.register_handler("name", |_| Ok("World!".to_string()));
-let output = template.render();
+let mut template: Edo<&str> = Edo::new("Hello {name}").unwrap();
+template.register_handler("name", |_, _| Ok("World!".to_string()));
+let output = template.render("");
 assert_eq!(output, "Hello World!");
 ```
 
@@ -34,9 +34,20 @@ Your handlers can also take arguments (As a `Vec<str>`).
 ```rust
 use edo::Edo;
 
-let mut template = Edo::new("{say_hello(World)}").unwrap();
-template.register_handler("say_hello", |args| Ok(format!("Hello {}", args[0])));
-let output = template.render();
+let mut template: Edo<&str> = Edo::new("{say_hello(World)}").unwrap();
+template.register_handler("say_hello", |args, _| Ok(format!("Hello {}", args[0])));
+let output = template.render("");
+assert_eq!(output, "Hello World");
+```
+
+Your handlers also take a context argument at render time.
+
+```rust
+use edo::Edo;
+
+let mut template: Edo<&str> = Edo::new("{say_hello(World)}").unwrap();
+template.register_handler("say_hello", |args, _| Ok(format!("Hello {}", args[0])));
+let output = template.render("");
 assert_eq!(output, "Hello World");
 ```
 
