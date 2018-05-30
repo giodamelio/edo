@@ -1,4 +1,5 @@
 use std::str;
+use std::borrow::Cow;
 
 use nom::{alphanumeric, IResult};
 
@@ -7,10 +8,10 @@ use error::EdoError;
 #[derive(Debug, PartialEq)]
 pub enum Expression<'a> {
     Function {
-        name: &'a str,
-        arguments: Vec<&'a str>,
+        name: Cow<'a, str>,
+        arguments: Vec<Cow<'a, str>>,
     },
-    Literal(&'a str),
+    Literal(Cow<'a, str>),
 }
 
 // Parse a list of arguments
@@ -46,16 +47,21 @@ named!(function<&[u8], Expression>, chain!(
     args: arguments? ~
     tag!("}") ,
     || { Expression::Function {
-        name: name,
-        arguments: args.unwrap_or(vec![]),
+        name: name.into(),
+        arguments: args.unwrap_or(vec![]).into_iter().map(|v| v.into()).collect(),
     }}
 ));
+
+fn tocow<'a>(s: &'a [u8]) -> Result<Cow<'a, str>, str::Utf8Error> {
+    str::from_utf8(s)
+        .and_then(|v| Ok(v.into()))
+}
 
 // Parse a literal
 named!(literal<&[u8], Expression>, map!(
     map_res!(
         is_not!("{"),
-        str::from_utf8
+        tocow
     ),
     Expression::Literal
 ));
@@ -67,7 +73,7 @@ named!(pub expressions<&[u8], Vec<Expression> >, many0!(alt!(
 )));
 
 /// Parse a template into a vector of expressions
-pub fn parse<'a>(input: &'a str) -> Result<Vec<Expression>, EdoError> {
+pub fn parse<'a>(input: &'a str) -> Result<Vec<Expression<'a>>, EdoError> {
     match expressions(input.as_bytes()) {
         IResult::Done(_, expressions) => Ok(expressions),
         IResult::Error(_) =>
@@ -132,7 +138,7 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Expression::Function {
-                    name: "test",
+                    name: "test".into(),
                     arguments: vec![],
                 }
             )
@@ -143,7 +149,7 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Expression::Function {
-                    name: "test",
+                    name: "test".into(),
                     arguments: vec![],
                 }
             )
@@ -154,8 +160,8 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Expression::Function {
-                    name: "test",
-                    arguments: vec!["1", "2", "3"],
+                    name: "test".into(),
+                    arguments: vec!["1".into(), "2".into(), "3".into()],
                 }
             )
         );
@@ -167,7 +173,7 @@ mod tests {
             literal(b"testing"),
             IResult::Done(
                 &b""[..],
-                Expression::Literal("testing")
+                Expression::Literal("testing".into())
             )
         );
     }
@@ -180,15 +186,15 @@ mod tests {
                 &b""[..],
                 vec![
                     Expression::Function {
-                        name: "test",
+                        name: "test".into(),
                         arguments: vec![],
                     },
-                    Expression::Literal("literal"),
+                    Expression::Literal("literal".into()),
                     Expression::Function {
-                        name: "test2",
+                        name: "test2".into(),
                         arguments: vec![],
                     },
-                    Expression::Literal("haha"),
+                    Expression::Literal("haha".into()),
                 ]
             )
         );
@@ -198,9 +204,9 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 vec![
-                    Expression::Literal("haha"),
+                    Expression::Literal("haha".into()),
                     Expression::Function {
-                        name: "test",
+                        name: "test".into(),
                         arguments: vec![],
                     },
                 ]
@@ -211,12 +217,12 @@ mod tests {
     #[test]
     fn parse_method() {
         assert_eq!(
-            parse("haha{test(a, b, c)}"),
+            parse("haha{test(a, b, c)}".into()),
             Ok(vec![
-                Expression::Literal("haha"),
+                Expression::Literal("haha".into()),
                 Expression::Function {
-                    name: "test",
-                    arguments: vec!["a", "b", "c"],
+                    name: "test".into(),
+                    arguments: vec!["a".into(), "b".into(), "c".into()],
                 },
             ])
         );

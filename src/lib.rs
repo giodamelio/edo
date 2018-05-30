@@ -43,19 +43,20 @@ mod parse;
 
 use std::str;
 use std::collections::HashMap;
+use std::borrow::Cow;
 
 use error::EdoError;
 use parse::Expression;
 
 enum ValueProducer<'a, C> {
-    Handler(Box<Fn(Vec<&'a str>, C) -> Result<String, String>>),
+    Handler(Box<Fn(Vec<Cow<'a, str>>, C) -> Result<String, String>>),
     Static(String),
 }
 
 /// A single template. Allows registering of handlers and rendering
 pub struct Edo<'a, C> {
     #[doc(hidden)]
-    value_producers: HashMap<&'a str, ValueProducer<'a, C>>,
+    value_producers: HashMap<Cow<'a, str>, ValueProducer<'a, C>>,
     template: Vec<Expression<'a>>,
 }
 
@@ -68,11 +69,14 @@ impl<'a, C: Clone> Edo<'a, C> {
     /// # use edo::Edo;
     /// let template: Result<Edo<&str>, _> = Edo::new("Hello {name}");
     /// ```
-    pub fn new(template_string: &'a str) -> Result<Edo<'a, C>, EdoError> {
-        Ok(Edo {
+    pub fn new<K: Into<&'a str>>(template_string: K) -> Result<Edo<'a, C>, EdoError> {
+
+        let e = Edo {
             value_producers: HashMap::new(),
-            template: try!(parse::parse(template_string)),
-        })
+            template: try!(parse::parse(template_string.into())),
+        };
+
+        Ok(e)
     }
 
     /// Register a new function handler
@@ -84,9 +88,9 @@ impl<'a, C: Clone> Edo<'a, C> {
     /// let mut template: Edo<&str> = Edo::new("Hello {name}").unwrap();
     /// template.register_handler("name", |_, _| Ok("World!".to_string()));
     /// ```
-    pub fn register_handler<F>(&mut self, name: &'a str, handler: F) where
-        F: 'static + Fn(Vec<&'a str>, C) -> Result<String, String> {
-        self.value_producers.insert(name, ValueProducer::Handler(Box::new(handler)));
+    pub fn register_handler<F, K: Into<Cow<'a, str>>>(&mut self, name: K, handler: F) where
+        F: 'static + Fn(Vec<Cow<'a, str>>, C) -> Result<String, String> {
+        self.value_producers.insert(name.into(), ValueProducer::Handler(Box::new(handler)));
     }
 
     /// Register a static replacement
@@ -98,8 +102,8 @@ impl<'a, C: Clone> Edo<'a, C> {
     /// let mut template: Edo<&str> = Edo::new("Hello {name}").unwrap();
     /// template.register_static("name", "World!");
     /// ```
-    pub fn register_static<S: Into<String>>(&mut self, name: &'a str, input: S) {
-        self.value_producers.insert(name, ValueProducer::Static(input.into()));
+    pub fn register_static<S: Into<String>, K: Into<Cow<'a, str>>>(&mut self, name: K, input: S) {
+        self.value_producers.insert(name.into(), ValueProducer::Static(input.into()));
     }
 
     /// Render template into a string
@@ -136,9 +140,9 @@ impl<'a, C: Clone> Edo<'a, C> {
         // 1. Leave literals untouched
         // 2. Call the handlers for each function call and replace within the output
         (self.template.iter()
-            .map(|expression| match *expression {
+            .map(|expression| match expression {
                 Expression::Literal(text) => text.to_string(),
-                Expression::Function { name, ref arguments } => {
+                Expression::Function { ref name, ref arguments } => {
                     match self.value_producers.get(name) {
                         None => "".to_string(),
                         Some(value_producer) => match value_producer {
@@ -175,7 +179,7 @@ mod tests {
             Ok(edo) => edo,
             Err(err) => panic!(err),
         };
-        edo.register_handler("name", |_, context| Ok("World!".to_string()));
+        edo.register_handler("name", |_, _context| Ok("World!".to_string()));
         assert!(edo.value_producers.get("name").is_some());
     }
 
@@ -195,7 +199,7 @@ mod tests {
             Ok(edo) => edo,
             Err(err) => panic!(err),
         };
-        edo.register_handler("name", |_, context| Ok("World!".to_string()));
+        edo.register_handler("name", |_, _context| Ok("World!".to_string()));
         assert_eq!(
             edo.render(""),
             "Hello World!"
@@ -252,5 +256,23 @@ mod tests {
         let (output, errors) = edo.render_with_errors("");
         assert_eq!(output, "Hello ");
         assert_eq!(errors, vec!["BORK"]);
+    }
+
+    #[test]
+    fn register_vanishing_str() {
+        let mut edo = match Edo::new("Hello {name}") {
+            Ok(edo) => edo,
+            Err(err) => panic!(err),
+        };
+
+        {
+            let k = "name";
+            edo.register_static(k, "World!");
+        }
+        let (_output, _errors) = edo.render_with_errors("");
+        assert_eq!(
+            edo.render(""),
+            "Hello World!"
+        );
     }
 }
